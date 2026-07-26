@@ -96,6 +96,7 @@ jobs:
 
       - name: Build recoveryimage
         run: |
+          set -o pipefail
           cd "$AOSP_DIR"
           export ALLOW_MISSING_DEPENDENCIES=true
           export BUILD_DATETIME=1781100000
@@ -105,47 +106,90 @@ jobs:
           source build/envsetup.sh
           lunch twrp_p200-eng
           mka recoveryimage 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          # `mka ... | tee` masks mka's real exit code (tee always succeeds);
+          # pipefail above makes the pipeline fail if mka does. Do not remove.
 
-      - name: Check recovery.img size against partition limit
+      - name: Report recovery.img size
+        # Informational only - AOSP's own ninja rule already enforces
+        # BOARD_RECOVERYIMAGE_PARTITION_SIZE and fails the build step above
+        # if recovery.img is oversized. No need to duplicate that check here.
+        if: always()
         run: |
           IMG="$AOSP_DIR/out/target/product/p200/recovery.img"
-          test -f "$IMG"
-          SIZE=$(stat -c '%s' "$IMG")
-          echo "recovery.img size: $SIZE bytes (partition limit: 39845888)"
-          if [ "$SIZE" -gt 39845888 ]; then
-            echo "::error::recovery.img ($SIZE bytes) exceeds the stock recovery partition size (39845888 bytes)"
-            exit 1
+          if [ -f "$IMG" ]; then
+            SIZE=$(stat -c '%s' "$IMG")
+            echo "recovery.img size: $SIZE bytes (partition limit: 39845888)"
+          else
+            echo "recovery.img was not produced."
+          fi
+
+      - name: Ramdisk size breakdown
+        # Runs regardless of build outcome - this is what we actually need
+        # to see in order to know what to trim, rather than guessing.
+        if: always()
+        run: |
+          ROOT="$AOSP_DIR/out/target/product/p200/recovery/root"
+          REPORT="$GITHUB_WORKSPACE/ramdisk-size-report.txt"
+          if [ -d "$ROOT" ]; then
+            {
+              echo "=== top-level du -sh, sorted ==="
+              du -sh "$ROOT"/* 2>/dev/null | sort -rh
+              echo ""
+              echo "=== breakdown to depth 3 ==="
+              du -h --max-depth=3 "$ROOT" 2>/dev/null | sort -rh | head -80
+              echo ""
+              echo "=== 30 largest individual files ==="
+              find "$ROOT" -type f -printf '%s %p\n' 2>/dev/null | sort -rn | head -30
+            } > "$REPORT"
+            cat "$REPORT"
+          else
+            echo "Ramdisk root not found at $ROOT (build did not get this far)" | tee "$REPORT"
           fi
 
       - name: Package Odin-flashable tar
-        if: success()
+        if: always()
         run: |
           IMG="$AOSP_DIR/out/target/product/p200/recovery.img"
           OUT_DIR="$GITHUB_WORKSPACE/artifacts"
           mkdir -p "$OUT_DIR"
-          cp "$IMG" "$OUT_DIR/recovery.img"
-          cd "$OUT_DIR"
-          tar --sort=name \
-            --mtime='@1781100000' \
-            --owner=0 --group=0 --numeric-owner \
-            -H ustar \
-            -cf "twrp-3.7.1_12-0-p200-${{ github.run_number }}.tar" \
-            recovery.img
+          if [ -f "$IMG" ]; then
+            cp "$IMG" "$OUT_DIR/recovery.img"
+            cd "$OUT_DIR"
+            tar --sort=name \
+              --mtime='@1781100000' \
+              --owner=0 --group=0 --numeric-owner \
+              -H ustar \
+              -cf "twrp-3.7.1_12-0-p200-${{ github.run_number }}.tar" \
+              recovery.img
+          else
+            echo "No recovery.img to package."
+          fi
 
       - name: Upload recovery.img and Odin tar
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: twrp-p200-${{ github.run_number }}
           path: |
             artifacts/recovery.img
             artifacts/*.tar
+          if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload build log on failure
-        if: failure()
+      - name: Upload ramdisk size report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ramdisk-size-report-${{ github.run_number }}
+          path: ramdisk-size-report.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log-${{ github.run_number }}
           path: build.log
+          if-no-files-found: ignore
           retention-days: 14
