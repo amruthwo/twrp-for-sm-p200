@@ -26,6 +26,16 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/aosp_base_telephony.mk)
 # Inherit common TWRP configuration.
 $(call inherit-product, vendor/twrp/config/common.mk)
 
+# vendor/twrp/config/packages.mk (pulled in by common.mk above) adds these
+# unconditionally via PRODUCT_PACKAGES, bypassing BoardConfig.mk's
+# TW_EXCLUDE_BASH/TW_EXCLUDE_NANO entirely (those only gate a separate
+# packaging path in prebuilt/Android.mk). Desktop/diagnostic tools with no
+# recovery purpose - drop them to help recovery.img fit the 38MiB stock
+# partition. Keeping tune2fs and the NTFS/exFAT tools since they're a real
+# feature (browsing/restoring external storage in those filesystems), not
+# just bloat.
+PRODUCT_PACKAGES := $(filter-out bash nano vim htop lsof openvpn powertop, $(PRODUCT_PACKAGES))
+
 ## Device identifier. This must come after all inclusions
 PRODUCT_DEVICE := p200
 PRODUCT_NAME := twrp_p200
