@@ -29,12 +29,30 @@ interchangeable by assumption.
 
 ## `prebuilt/recovery_dtbo`
 
-The **full stock DTBO partition image** from this device's firmware (not a
-single hand-extracted entry):
+**Correction, 2026-07-26**: an earlier version of this file used the raw
+8388608-byte stock DTBO *partition* dump directly, reasoning that reusing the
+whole thing was safer than hand-parsing the packed-DTBO format. That reasoning
+was based on a false premise — the file wasn't actually a multi-entry image at
+all. Its own header (`dt_table_header`, see AOSP `system/libufdt/include/dt_table.h`)
+declares `dt_entry_count: 1` and `total_size: 88976` bytes; everything from
+byte 88976 to the 8MB partition-size boundary is Samsung's own AVB signing
+footer (`SignerVer02`, `avbtool 1.1.0`, build/CSC strings — confirmed via
+`strings`), completely irrelevant to a build with `BOARD_AVB_ENABLE := false`.
+This was discovered by comparing byte-for-byte against `xuanyayi/twrp-for-sm-p205`'s
+actual release artifact (`v3.7.1_12-0-p205-20260614-150146`), whose
+`recovery_dtbo` is 88644 bytes — nearly identical real size once padding is
+removed. The 8MB-vs-88KB gap accounted for **8299964 of the 8529920-byte total
+gap** between our first failing build and their working one; the recovery
+ramdisk (ICU included) was essentially the same size on both sides the whole
+time.
+
+Now uses `head -c 88976 dtbo.img`, i.e. the real DTBO content with the
+irrelevant trailing partition padding/AVB footer dropped, not a hand-extracted
+or reconstructed entry:
 
 ```
-sha256: 2b986099f6c148ac71bbd4b8a18ff5d20725c9a98c03608092d0b970baf82fe5
-size:   8388608 bytes (8 MiB, matches BOARD_DTBOIMG_PARTITION_SIZE)
+sha256: 2e9db0776d0a6211b86695d46b2447dca9ddd1e50ca34ab527935db63fb3ea8f
+size:   88976 bytes
 ```
 
 Contains (confirmed via `strings`) the entry:
@@ -43,12 +61,6 @@ Contains (confirmed via `strings`) the entry:
 samsung,WISDOMWIFI CHN OPEN 01
 Samsung WISDOMWIFI CHN OPEN 01 board based on EXYNOS7904
 ```
-
-Using the full multi-entry stock image rather than hand-extracting a single
-DTBO entry was a deliberate choice: the bootloader already selects the correct
-entry from this exact image via `board_id`/`board_rev` every time this unit
-boots stock Android, so reusing it whole avoids the risk of extracting the
-wrong entry or corrupting the packed-DTBO format by hand.
 
 ## Why not just reuse the P205 tree's prebuilt binaries
 

@@ -141,6 +141,67 @@ jobs:
           # `mka ... | tee` masks mka's real exit code (tee always succeeds);
           # pipefail above makes the pipeline fail if mka does. Do not remove.
 
+      - name: Trim ICU and repack recovery.img
+        # ICU (libicui18n.so, libicuuc.so, libandroidicu.so) is included
+        # unconditionally by TWRP's own Android.mk (TWRP_REQUIRED_MODULES,
+        # not gated by any TW_EXCLUDE_* flag). A full reachability scan from
+        # every executable in system/bin found nothing that actually needs
+        # it - confirmed dead weight for this English-only (TW_LANGUAGES=en)
+        # build. Repack recovery.img with those files removed rather than
+        # patching TWRP's own upstream Android.mk. Note: AOSP's own ninja
+        # rule already recorded the "Build recoveryimage" step above as
+        # failed because the untrimmed image was oversized - that step's
+        # conclusion can't be un-failed retroactively even if this trim
+        # succeeds, so check the size this step reports, not the overall
+        # run status, to know whether the final image actually fits.
+        if: always()
+        run: |
+          set -euo pipefail
+          IMG="$AOSP_DIR/out/target/product/p200/recovery.img"
+          if [ ! -f "$IMG" ]; then
+            echo "No recovery.img to trim (build did not get this far)."
+            exit 0
+          fi
+
+          MKBOOTIMG=$(find "$AOSP_DIR/out/host/linux-x86/bin" -iname "mkbootimg" | head -1)
+          UNPACK=$(find "$AOSP_DIR/out/host/linux-x86/bin" -iname "unpack_bootimg" | head -1)
+          if [ -z "$MKBOOTIMG" ] || [ -z "$UNPACK" ]; then
+            echo "mkbootimg/unpack_bootimg not found under out/host/linux-x86/bin, skipping trim."
+            exit 0
+          fi
+
+          WORK="$RUNNER_TEMP/trim"
+          mkdir -p "$WORK/unpacked" "$WORK/ramdisk"
+          "$UNPACK" --boot_img "$IMG" --out "$WORK/unpacked"
+
+          cd "$WORK/ramdisk"
+          zcat "$WORK/unpacked/ramdisk" | cpio -idm 2>/dev/null
+
+          BEFORE=$(du -sb . | cut -f1)
+          rm -f system/lib64/libicui18n.so system/lib64/libicuuc.so system/lib64/libandroidicu.so
+          AFTER=$(du -sb . | cut -f1)
+          echo "Ramdisk uncompressed: $BEFORE -> $AFTER bytes (removed $((BEFORE - AFTER)))"
+
+          find . | cpio -o -H newc 2>/dev/null | gzip > "$WORK/unpacked/ramdisk-trimmed"
+
+          "$MKBOOTIMG" \
+            --kernel "$WORK/unpacked/kernel" \
+            --ramdisk "$WORK/unpacked/ramdisk-trimmed" \
+            --cmdline "androidboot.hardware=exynos7904 buildvariant=eng" \
+            --base 0x10000000 --pagesize 2048 \
+            --recovery_dtbo "$AOSP_DIR/device/samsung/p200/prebuilt/recovery_dtbo" \
+            --os_version 12 --os_patch_level 2099-12-31 \
+            --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 \
+            --second_offset 0x00f00000 --set_empty_second_addr \
+            --tags_offset 0x00000100 --header_version 1 \
+            --board SRPSA16A009RU \
+            --output "$IMG.trimmed"
+
+          OLD_SIZE=$(stat -c '%s' "$IMG")
+          NEW_SIZE=$(stat -c '%s' "$IMG.trimmed")
+          echo "recovery.img: $OLD_SIZE -> $NEW_SIZE bytes (limit 39845888, margin $((39845888 - NEW_SIZE)))"
+          mv "$IMG.trimmed" "$IMG"
+
       - name: Report recovery.img size
         # Informational only - AOSP's own ninja rule already enforces
         # BOARD_RECOVERYIMAGE_PARTITION_SIZE and fails the build step above
