@@ -1,13 +1,16 @@
-# TWRP for Samsung Galaxy Tab A 8.0 with S Pen (SM-P205)
-
-![Galaxy Tab A8](https://fdn2.gsmarena.com/vv/pics/samsung/samsung-galaxy-tab-a-s-pen-sm-p205-2.jpg "Galaxy Tab A8")
+# TWRP for Samsung Galaxy Tab A 8.0 with S Pen (SM-P200)
 
 This device tree builds TWRP 12.1 for the Samsung Galaxy Tab A 8.0 with S Pen
-LTE (`SM-P205`). The Samsung codename for this device is `wisdom`.
+Wi-Fi (`SM-P200`). The Samsung codename for this device is `wisdomwifi`
+(product `wisdomwifizh`). The LTE sibling is `SM-P205`, codename `wisdom`.
 
-This tree is based on the upstream SM-P205 TWRP device tree from
-`topser9/twrp_device_samsung_p205`, with TWRP 12.1-specific build and recovery
-fixes maintained here.
+This tree is forked from `xuanyayi/twrp-for-sm-p205` (itself based on the
+upstream SM-P205 TWRP device tree from `topser9/twrp_device_samsung_p205`),
+adapted here for the Wi-Fi-only `SM-P200`. The prebuilt kernel (`prebuilt/Image`)
+and recovery DTBO (`prebuilt/recovery_dtbo`) are pulled directly from this
+exact device's stock firmware (`P200ZHS4CWA2`, CSC `TGY`), not carried over
+from the P205 tree — see `DEVICE_INFO.md` for how those were extracted and
+verified.
 
 ## Build Environment
 
@@ -57,52 +60,53 @@ command. On very unstable networks, use `-j1`.
 ## Clone Device Tree
 
 Clone this repository into the Android source tree exactly at
-`device/samsung/p205`:
+`device/samsung/p200`:
 
 ```bash
 cd ~/twrp
-rm -rf device/samsung/p205
-git clone https://github.com/xuanyayi/twrp-for-sm-p205.git device/samsung/p205
+rm -rf device/samsung/p200
+git clone git@github.com:amruthwo/twrp-for-sm-p200.git device/samsung/p200
 ```
 
 The expected device tree files include:
 
 ```text
-device/samsung/p205/AndroidProducts.mk
-device/samsung/p205/BoardConfig.mk
-device/samsung/p205/twrp_p205.mk
-device/samsung/p205/prebuilt/Image
-device/samsung/p205/prebuilt/recovery_dtbo
+device/samsung/p200/AndroidProducts.mk
+device/samsung/p200/BoardConfig.mk
+device/samsung/p200/twrp_p200.mk
+device/samsung/p200/prebuilt/Image
+device/samsung/p200/prebuilt/recovery_dtbo
 ```
 
 ## Apply Required Patches
 
-This device tree depends on a few small TWRP 12.1 base-tree patches for the
-P205 build and recovery runtime. Apply them from the Android source root before
+This device tree depends on a few small TWRP 12.1 base-tree patches (generic
+AOSP/TWRP-core fixes, not device-specific — inherited as-is from the P205
+tree) for the recovery runtime. Apply them from the Android source root before
 building:
 
 ```bash
 cd ~/twrp
-P205_TREE="$PWD/device/samsung/p205"
+P200_TREE="$PWD/device/samsung/p200"
 
-git -C build/make apply "$P205_TREE/patches/0001-build-make-p205-recovery-props.patch"
-git -C system/sepolicy apply "$P205_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
-git -C bootable/recovery apply "$P205_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
-git -C system/tools/mkbootimg apply "$P205_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
-git -C vendor/twrp apply "$P205_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
+git -C build/make apply "$P200_TREE/patches/0001-build-make-p205-recovery-props.patch"
+git -C system/sepolicy apply "$P200_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
+git -C bootable/recovery apply "$P200_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
+git -C system/tools/mkbootimg apply "$P200_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
+git -C vendor/twrp apply "$P200_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
 ```
 
 If you want to verify first without changing files:
 
 ```bash
 cd ~/twrp
-P205_TREE="$PWD/device/samsung/p205"
+P200_TREE="$PWD/device/samsung/p200"
 
-git -C build/make apply --check "$P205_TREE/patches/0001-build-make-p205-recovery-props.patch"
-git -C system/sepolicy apply --check "$P205_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
-git -C bootable/recovery apply --check "$P205_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
-git -C system/tools/mkbootimg apply --check "$P205_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
-git -C vendor/twrp apply --check "$P205_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
+git -C build/make apply --check "$P200_TREE/patches/0001-build-make-p205-recovery-props.patch"
+git -C system/sepolicy apply --check "$P200_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
+git -C bootable/recovery apply --check "$P200_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
+git -C system/tools/mkbootimg apply --check "$P200_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
+git -C vendor/twrp apply --check "$P200_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
 ```
 
 If a patch reports that it is already applied, skip that patch.
@@ -113,33 +117,33 @@ If a patch reports that it is already applied, skip that patch.
 cd ~/twrp
 export ALLOW_MISSING_DEPENDENCIES=true
 export BUILD_DATETIME=1781100000
-export BUILD_NUMBER=p205-repro-20260610
-export BUILD_USERNAME=p205
+export BUILD_NUMBER=p200-repro-20260726
+export BUILD_USERNAME=p200
 export BUILD_HOSTNAME=repro
 source build/envsetup.sh
-lunch twrp_p205-eng
+lunch twrp_p200-eng
 mka recoveryimage
 ```
 
 The output image is:
 
 ```text
-out/target/product/p205/recovery.img
+out/target/product/p200/recovery.img
 ```
 
 For a clean rebuild:
 
 ```bash
 cd ~/twrp
-rm -rf out/target/product/p205 out/soong/build_number.txt
+rm -rf out/target/product/p200 out/soong/build_number.txt
 
 export ALLOW_MISSING_DEPENDENCIES=true
 export BUILD_DATETIME=1781100000
-export BUILD_NUMBER=p205-repro-20260610
-export BUILD_USERNAME=p205
+export BUILD_NUMBER=p200-repro-20260726
+export BUILD_USERNAME=p200
 export BUILD_HOSTNAME=repro
 source build/envsetup.sh
-lunch twrp_p205-eng
+lunch twrp_p200-eng
 mka recoveryimage
 ```
 
@@ -148,16 +152,16 @@ mka recoveryimage
 To flash with Odin, pack `recovery.img` into a tar archive:
 
 ```bash
-cd /path/to/twrp-12.1/out/target/product/p205
+cd /path/to/twrp-12.1/out/target/product/p200
 tar --sort=name \
   --mtime='@1781100000' \
   --owner=0 --group=0 --numeric-owner \
   -H ustar \
-  -cf twrp-3.7.1_12-0-20260614-150146.tar \
+  -cf twrp-3.7.1_12-0-p200.tar \
   recovery.img
 ```
 
-Flash `twrp-3.7.1_12-0-20260614-150146.tar` with Odin's AP slot.
+Flash `twrp-3.7.1_12-0-p200.tar` with Odin's AP slot.
 
 In Odin, disable `Auto Reboot` before flashing. After Odin reports `PASS`, do
 not let the tablet boot Android first. Hold `Power + Volume Down` to leave
@@ -167,32 +171,37 @@ and keep holding until recovery starts.
 ## Known Build Notes
 
 - Correct manifest branch: `twrp-12.1`
-- Correct device path: `device/samsung/p205`
-- Correct lunch target: `twrp_p205-eng`
-- Recovery kernel: `prebuilt/Image`
-- Recovery DTBO: `prebuilt/recovery_dtbo`
+- Correct device path: `device/samsung/p200`
+- Correct lunch target: `twrp_p200-eng`
+- Recovery kernel: `prebuilt/Image` — extracted from this device's own stock
+  `boot.img` (`P200ZHS4CWA2`), not carried over from the P205 tree
+- Recovery DTBO: `prebuilt/recovery_dtbo` — the full stock DTBO partition
+  image from this device's own firmware (contains the `wisdomwifizh`/
+  `wisdomwifi_chn_open` entries; the bootloader selects the matching one by
+  `board_id`/`board_rev` the same way it does for normal Android boot)
 - Recovery partition size: `39845888` bytes
 - `ALLOW_MISSING_DEPENDENCIES=true` is expected for this minimal recovery tree.
 - Reproducible release builds use `BUILD_DATETIME=1781100000`,
-  `BUILD_NUMBER=p205-repro-20260610`, `BUILD_USERNAME=p205`, and
+  `BUILD_NUMBER=p200-repro-<date>`, `BUILD_USERNAME=p200`, and
   `BUILD_HOSTNAME=repro`.
 - Optional TWRP extras are trimmed to keep `recovery.img` inside the stock
   recovery partition size.
-- The P205 bootable/recovery patch includes a forced USB disconnect and
-  minadbd handoff so ADB sideload enumerates on Windows even when `/data` is
-  encrypted and MTP is not running.
+- The inherited P205 bootable/recovery patch includes a forced USB disconnect
+  and minadbd handoff so ADB sideload enumerates on Windows even when `/data`
+  is encrypted and MTP is not running. Not P205-specific in practice — this is
+  a generic AOSP/TWRP-core fix.
 
 ## Common Problems
 
-### `lunch twrp_p205-eng` is not listed
+### `lunch twrp_p200-eng` is not listed
 
 Check that the device tree is in the correct path:
 
 ```bash
-ls device/samsung/p205/AndroidProducts.mk
+ls device/samsung/p200/AndroidProducts.mk
 ```
 
-If the file is missing, clone this repository again into `device/samsung/p205`.
+If the file is missing, clone this repository again into `device/samsung/p200`.
 
 ### `vendor/twrp/config/common.mk` not found
 
@@ -209,7 +218,7 @@ repo sync -c --no-tags --no-clone-bundle --optimized-fetch --fail-fast -j"$(npro
 ### Patch application fails
 
 Make sure the patches are applied from the Android source root, not from inside
-`device/samsung/p205`:
+`device/samsung/p200`:
 
 ```bash
 cd ~/twrp
@@ -226,7 +235,7 @@ recovery partition limit for this device is `39845888` bytes.
 Check the image size with:
 
 ```bash
-stat -c '%n %s bytes' out/target/product/p205/recovery.img
+stat -c '%n %s bytes' out/target/product/p200/recovery.img
 ```
 
 ### `mka: command not found`
@@ -237,14 +246,14 @@ Load the Android build environment first:
 source build/envsetup.sh
 ```
 
-Then run `lunch twrp_p205-eng` again before building.
+Then run `lunch twrp_p200-eng` again before building.
 
 ## Device Notes
 
-- Device: Samsung Galaxy Tab A 8.0 with S Pen LTE
-- Model: `SM-P205`
-- Samsung codename: `wisdom`
+- Device: Samsung Galaxy Tab A 8.0 with S Pen (Wi-Fi)
+- Model: `SM-P200`
+- Samsung codename: `wisdomwifi` (product `wisdomwifizh`)
 - Platform: Exynos 7904 / universal7904
-- Device tree path: `device/samsung/p205`
+- Device tree path: `device/samsung/p200`
 - Recovery variant: TWRP 12.1
 - TWRP version from this branch: `3.7.1_12-0`

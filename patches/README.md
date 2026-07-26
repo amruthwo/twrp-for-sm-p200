@@ -1,23 +1,26 @@
-# P205 TWRP 12.1 Base-Tree Patches
+# TWRP 12.1 Base-Tree Patches
 
-Apply these patches from the Android source root after syncing the TWRP 12.1
-manifest and cloning this device tree.
+Generic AOSP/TWRP-core fixes inherited from the upstream P205 tree — not
+device-specific (nothing in these patches' content references p205/wisdom
+hardware), so the filenames are kept as-is rather than renamed for churn's
+sake. Apply these patches from the Android source root after syncing the
+TWRP 12.1 manifest and cloning this device tree.
 
 ```bash
 cd ~/twrp
-P205_TREE="$PWD/device/samsung/p205"
+P200_TREE="$PWD/device/samsung/p200"
 
-git -C build/make apply "$P205_TREE/patches/0001-build-make-p205-recovery-props.patch"
-git -C system/sepolicy apply "$P205_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
-git -C bootable/recovery apply "$P205_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
-git -C system/tools/mkbootimg apply "$P205_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
-git -C vendor/twrp apply "$P205_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
+git -C build/make apply "$P200_TREE/patches/0001-build-make-p205-recovery-props.patch"
+git -C system/sepolicy apply "$P200_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
+git -C bootable/recovery apply "$P200_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
+git -C system/tools/mkbootimg apply "$P200_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
+git -C vendor/twrp apply "$P200_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
 ```
 
 Patch summary:
 
 - `0001-build-make-p205-recovery-props.patch`: keeps recovery USB properties
-  deterministic and allows `device/samsung/p205/ramdisk.prop` to feed the
+  deterministic and allows `device/samsung/p200/ramdisk.prop` to feed the
   recovery ramdisk.
 - `0002-system-sepolicy-drop-deprecated-board-plat-policy.patch`: removes legacy
   `BOARD_PLAT_*_SEPOLICY_DIR` compatibility reads that produce Android 12.1

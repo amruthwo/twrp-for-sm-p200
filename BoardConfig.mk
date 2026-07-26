@@ -14,10 +14,10 @@
 # limitations under the License.
 #
 
-DEVICE_PATH := device/samsung/p205
+DEVICE_PATH := device/samsung/p200
 
 # OTA Assert
-TARGET_OTA_ASSERT_DEVICE := wisdom
+TARGET_OTA_ASSERT_DEVICE := wisdomwifi
 
 # Architecture
 TARGET_ARCH := arm64
