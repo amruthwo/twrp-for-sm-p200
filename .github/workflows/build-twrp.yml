@@ -1,0 +1,151 @@
+name: Build TWRP (p200 / wisdomwifi)
+
+# Manual trigger only. This is a real AOSP-scale build (up to the 6-hour
+# GitHub-hosted runner limit); it should not fire on every push.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350 # stay under the 360-minute hard cap, leave room to upload artifacts on failure
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      AOSP_DIR: /mnt/aosp/twrp
+    steps:
+      - name: Check out device tree
+        uses: actions/checkout@v4
+        with:
+          path: device-tree-src
+
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          build-mount-path: /mnt/aosp
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
+            lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
+            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
+            rsync schedtool squashfs-tools unzip xsltproc zip zlib1g-dev
+
+      - name: Set up git identity and repo tool
+        run: |
+          git config --global user.name "twrp-builder"
+          git config --global user.email "twrp-builder@localhost"
+          git config --global color.ui false
+          mkdir -p "$HOME/.bin"
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo > "$HOME/.bin/repo"
+          chmod a+x "$HOME/.bin/repo"
+          echo "$HOME/.bin" >> "$GITHUB_PATH"
+
+      - name: Set up ccache
+        run: |
+          echo "USE_CCACHE=1" >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=/mnt/aosp/ccache" >> "$GITHUB_ENV"
+          mkdir -p /mnt/aosp/ccache
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: /mnt/aosp/ccache
+          key: ccache-p200-${{ github.run_id }}
+          restore-keys: |
+            ccache-p200-
+
+      - name: repo init (twrp-12.1)
+        run: |
+          mkdir -p "$AOSP_DIR"
+          cd "$AOSP_DIR"
+          repo init --depth=1 \
+            -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git \
+            -b twrp-12.1
+
+      - name: repo sync
+        run: |
+          cd "$AOSP_DIR"
+          repo sync -c --no-tags --no-clone-bundle --optimized-fetch --fail-fast -j"$(nproc)"
+
+      - name: Place device tree
+        run: |
+          mkdir -p "$AOSP_DIR/device/samsung"
+          rm -rf "$AOSP_DIR/device/samsung/p200"
+          cp -a "$GITHUB_WORKSPACE/device-tree-src" "$AOSP_DIR/device/samsung/p200"
+          test -f "$AOSP_DIR/device/samsung/p200/AndroidProducts.mk"
+
+      - name: Apply patches
+        run: |
+          cd "$AOSP_DIR"
+          P200_TREE="$AOSP_DIR/device/samsung/p200"
+          git -C build/make apply "$P200_TREE/patches/0001-build-make-p205-recovery-props.patch"
+          git -C system/sepolicy apply "$P200_TREE/patches/0002-system-sepolicy-drop-deprecated-board-plat-policy.patch"
+          git -C bootable/recovery apply "$P200_TREE/patches/0003-bootable-recovery-p205-twrp12-support.patch"
+          git -C system/tools/mkbootimg apply "$P200_TREE/patches/0004-mkbootimg-preserve-empty-second-address.patch"
+          git -C vendor/twrp apply "$P200_TREE/patches/0005-vendor-twrp-export-p205-soong-vars.patch"
+
+      - name: Build recoveryimage
+        run: |
+          cd "$AOSP_DIR"
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export BUILD_DATETIME=1781100000
+          export BUILD_NUMBER="p200-ci-${{ github.run_number }}"
+          export BUILD_USERNAME=p200
+          export BUILD_HOSTNAME=github-actions
+          source build/envsetup.sh
+          lunch twrp_p200-eng
+          mka recoveryimage 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Check recovery.img size against partition limit
+        run: |
+          IMG="$AOSP_DIR/out/target/product/p200/recovery.img"
+          test -f "$IMG"
+          SIZE=$(stat -c '%s' "$IMG")
+          echo "recovery.img size: $SIZE bytes (partition limit: 39845888)"
+          if [ "$SIZE" -gt 39845888 ]; then
+            echo "::error::recovery.img ($SIZE bytes) exceeds the stock recovery partition size (39845888 bytes)"
+            exit 1
+          fi
+
+      - name: Package Odin-flashable tar
+        if: success()
+        run: |
+          IMG="$AOSP_DIR/out/target/product/p200/recovery.img"
+          OUT_DIR="$GITHUB_WORKSPACE/artifacts"
+          mkdir -p "$OUT_DIR"
+          cp "$IMG" "$OUT_DIR/recovery.img"
+          cd "$OUT_DIR"
+          tar --sort=name \
+            --mtime='@1781100000' \
+            --owner=0 --group=0 --numeric-owner \
+            -H ustar \
+            -cf "twrp-3.7.1_12-0-p200-${{ github.run_number }}.tar" \
+            recovery.img
+
+      - name: Upload recovery.img and Odin tar
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twrp-p200-${{ github.run_number }}
+          path: |
+            artifacts/recovery.img
+            artifacts/*.tar
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: build.log
+          retention-days: 14
