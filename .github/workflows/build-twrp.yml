@@ -13,6 +13,24 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
       AOSP_DIR: /mnt/aosp/twrp
     steps:
+      - name: Report raw disk layout (before any modification)
+        # Two prior runs crashed with the whole runner process dying from
+        # "No space left on device" during a plain apt-get, even after
+        # increasing root-reserve-mb - and no log survived either crash to
+        # explain why. Before guessing at that number again, see the actual
+        # untouched starting layout. This step does nothing but read state,
+        # so it should reliably complete and log even if something later
+        # goes wrong.
+        run: |
+          echo "=== df -h ==="
+          df -h
+          echo ""
+          echo "=== lsblk ==="
+          lsblk
+          echo ""
+          echo "=== free -h ==="
+          free -h
+
       - name: Check out device tree
         uses: actions/checkout@v4
         with:
