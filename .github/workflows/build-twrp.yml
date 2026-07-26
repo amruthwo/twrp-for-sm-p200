@@ -19,9 +19,19 @@ jobs:
           path: device-tree-src
 
       - name: Maximize build space
+        # root-reserve-mb is set high deliberately: this action pools
+        # (root's free space minus this reserve) together with /mnt's spare
+        # space for the build volume. /mnt alone (~60-70G typically) is
+        # already more than this build needs (~25-40G), so there's no need
+        # to draw from root at all - and doing so cost us an entire run
+        # (worker crashed mid apt-get, out of space on root) when a given
+        # runner image happened to start with less free root space than
+        # last time. Leaving root's own reserve large keeps the runner's
+        # own infra (apt cache, $GITHUB_WORKSPACE, the runner process
+        # itself) safe regardless of that variance.
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 4096
+          root-reserve-mb: 12288
           swap-size-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
@@ -29,6 +39,10 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
           build-mount-path: /mnt/aosp
+
+      - name: Report disk space after maximize-build-space
+        if: always()
+        run: df -h
 
       - name: Install build dependencies
         run: |
